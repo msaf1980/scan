@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+# Multithreaded script for compose multipage djvu document from induvidual images or singlepage djvu's
 ### Inspired by script pdf-trim-to-djvu.sh (http://gist.github.com/315791)
 ### PUBLIC DOMAIN
 ## Python 3.5 or greater is required
@@ -15,8 +16,11 @@ import shlex
 import tempfile, shutil
 from distutils import spawn
 from time import sleep
+import traceback
+import threading
+import queue
 
-run = True
+running = True
 
 def exit_error(msg):
     if msg:
@@ -32,7 +36,18 @@ def is_djvu(filename):
         return True
     else:
         return False
-    
+
+def workers_init(WorkerClass, jobs):
+    workers = []
+    queue_in = queue.Queue()
+    queue_out = queue.Queue()
+    for _ in range(jobs):
+        worker = WorkerClass(queue_in, queue_out)
+        worker.start()
+        workers.append(worker)
+    return(workers, queue_in, queue_out)
+
+        
 # Return stdout
 def call_out(cmd_args):
     proc = subprocess.Popen(cmd_args, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
@@ -85,7 +100,7 @@ def minidjvucoder(inf_list, outf):
     cmd_args.extend(inf_list)
     cmd_args.append(outf)
     subprocess.check_call(cmd_args)
-    printf("M:{%d} {:s} - {:s}".format(len(inf_list), basename_noext(inf_list[0]), basename_noext(inf_list[-1])))
+    return("M:{%d} {:s} - {:s}".format(len(inf_list), basename_noext(inf_list[0]), basename_noext(inf_list[-1])))
 
 ### Color
 def cpaldjvucoder(inf, outf):
@@ -153,20 +168,20 @@ def codjvucoder(inf, outf):
 def ocr(djvu):
     if useocr:
         print("Starting OCR")
-        subprocess.check_call([ ocrodjvu, "--engine", ocrengine, "--language", ocrlanguage, "--jobs", str(ocrjobs), "--in-place", "--on-error=resume",  djvu ])
+        subprocess.check_call([ ocrodjvu, "--engine", ocrengine, "--language", ocrlanguage, "--jobs", str(jobs), "--in-place", "--on-error=resume",  djvu ])
 
-def nomini_process(in_dir, f, djvus):
+def nomini_process(f):
+    global running
     inf = os.path.join(in_dir, f)
     if is_djvu(inf):
-        djvus.append(inf)
+        return inf
     else:
-        of = os.path.join(out_dir, f)
+        of = os.path.join(tmp_dir, f)
         of_pnm = of + ".pnm"
         of_djvu = of + ".djvu"
         
         if os.path.exists(of_djvu):
-            djvus.append(of_djvu)
-            return
+            return (inf, of_djvu, None)
         try:
             if not os.path.exists(of_pnm):
                 subprocess.check_call([ convert, inf, of_pnm ], shell=True)
@@ -182,23 +197,44 @@ def nomini_process(in_dir, f, djvus):
                     colorcoder(of_pnm, of_djvu)
             else:
                 cjb2coder(of_pnm, of_djvu)
-            djvus.append(of_djvu)
-        except ValueError as e:
-            run = False
-            raise ValueError("can't identify {:s}: %s\n".format(inf, str(e)))
-        except Exception as e:
-            run = False
+            return (inf, of_djvu, None)
+        except ValueError:
+            running = False
+            return (inf, None, "not identify %s: %s\n" % (inf, traceback.format_exc()))
+        except KeyboardInterrupt:
+            running = False
             if os.path.exists(of_djvu):
                 sleep(1)
                 os.remove(of_djvu)
             if os.path.exists(of_pnm):
                 sleep(1)
                 os.remove(of_pnm)
-            raise e
+            return (inf, None, "inperrupted process %s\n%s" % (f, traceback.format_exc()))
+        except Exception:
+            if os.path.exists(of_djvu):
+                os.remove(of_djvu)
+            return (inf, None, "failed process %s\n%s" % (f, traceback.format_exc() ))
         finally:
             if os.path.exists(of_pnm):
                 os.remove(of_pnm)
-        
+
+class NoMiniProcess(threading.Thread):
+    def __init__(self, queue_in, queue_out):
+        threading.Thread.__init__(self)
+        self._queue_in = queue_in
+        self._queue_out = queue_out
+
+    def run(self):
+        global running
+        while running:
+            f = self._queue_in.get()
+            if f == 'quit' or not running:
+                break
+            djvu = nomini_process(f)
+            if djvu is None:
+                running = False
+            self._queue_in.put((f, djvu))
+            
 ### General coder and bundler
 # convert all pages to pnm: convert
 # determine color depth of each page
@@ -208,19 +244,67 @@ def nomini_process(in_dir, f, djvus):
 # if unique colors >= 129, compress with c44 or codjvu
 # display progress symbols (B or M for Bitonal, C for TrueColor, L for codjvu layers, F for Palette)
 # create bundled DjVu file
-def nomini(in_dir, out_dir, out_djvu, no_merge):
+def nomini(out_djvu, no_merge):
+    global running
     files = [ f for f in os.listdir(in_dir) if os.path.isfile(os.path.join(in_dir, f)) and os.path.splitext(f)[-1].lower() in extensions ]
+    files.sort()
     pgcount = len(files)
     if pgcount == 0:
         exit_error("input files not found")
     print("processing {:d} files".format(pgcount))
-    djvus = [ ]
     pg = 0
-    for f in files:
-        nomini_process(in_dir, f, djvus)
-        pg += 1
-        if pg % 10 == 0:
-            print("processed {:d} files".format(pg))
+    djvus = [ ]
+    if jobs >  1:
+        res = 0
+        (workers, queue_in, queue_out) = workers_init(NoMiniProcess, jobs)
+        for f in files:
+            if running: queue_in.put(f)
+            try:
+                (inf, djvu, err) = queue_out.get(False, timeout=0.5)
+                if djvu is None:
+                    running = False
+                    res  = 1
+                    sys.stderr.write(err)
+                else:
+                    pg += 1
+                    if pg % 10 == 0:
+                        print("processed {:d} files".format(pg))
+            except queue.Empty:
+                pass
+            except Exception as e:
+                sys.stderr.write("%s" % traceback.format_exc())
+                running = False
+                res = 1
+
+       	for worker in workers:
+            queue_in.put('quit')
+        for worker in workers:
+            worker.join()
+            
+        try:
+            while True:
+                (inf, djvu, err) = queue_out.get(False)
+                if djvu is None:
+                    res  = 1
+                    sys.stderr.write(err)
+                else:
+                    pg += 1
+                    if pg % 10 == 0:
+                        print("processed {:d} files".format(pg))
+        except queue.Empty:
+            pass
+        sys.exit(res)
+    else:
+        for f in files:
+            (f, djvu, err) = nomini_process(f)
+            if djvu is None:
+                sys.stderr.write(err)
+                sys.exit(1)
+            djvus.append(djvu)
+            pg += 1
+            if pg % 10 == 0:
+                    print("processed {:d} files".format(pg))
+        djvus.sort()
     
     if no_merge:
         return
@@ -233,7 +317,7 @@ def nomini(in_dir, out_dir, out_djvu, no_merge):
 ### Minidjvu-based coder and bundler
 # Similar to previous, but instead of cjb2 minidjvu called every time when black and white sequence interrupted with color image, or when sequence ends on black and white file
 # Works with sequences, therefore visually less verbose, minidjvu is also slower than cjb2
-def mini(in_dir, out_dir, out_djvu, no_merge):
+def mini(out_djvu, no_merge):
     exit_error("minidjvu  not relised yet")
 
 
@@ -261,7 +345,7 @@ def main():
     global ag
     global dpi
     global ocrengine
-    global ocrjobs
+    global jobs
     global usecodjvu
     global usemini
     global ocrlanguage
@@ -269,10 +353,13 @@ def main():
     global treshold
     global verbose
     global out_dir
+    global tmp_dir
     global in_dir
     global out_djvu
     global extensions
     
+    global runnnig
+
     parser = optparse.OptionParser(usage='Usage: %prog [options]')
     
     #sys.stderr.write(" -a <0|1|2> aggressivity: 0 is not aggressive, 1 is aggressive, 2 is very aggressive [default: {:d}]\n".format(agdefault))    
@@ -287,9 +374,9 @@ def main():
     #sys.stderr.write(" -r <lang>   if not empty, use OCR engine with given language [default: {:s}]\n".format(ocrlanguagedefault))
     parser.add_option('-r', dest='ocrlanguage', action='store',\
                              help='if not empty, use OCR engine with given language')                             
-    #sys.stderr.write(" -j <ocrjobs>   number of OCR jobs [default: {:d}]\n".format(ocrjobsdefault))
-    parser.add_option('-j', dest='ocrjobs', action='store', type="int", default=1,\
-                             help='number of OCR jobs')
+    #sys.stderr.write(" -j <jobs>   number of jobs [default: {:d}]\n".format(jobs))
+    parser.add_option('-j', dest='jobs', action='store', type="int", default=1,\
+                             help='number of jobs (1 disabled multiprocessing')
     #sys.stderr.write(" -l <int>    [default: {:d}]\n".format(codefault))
     parser.add_option('-l', dest='usecodjvu', action='store', type="int", default=0,\
                              help='if not 0, will use forced segmentation (with <int> downsampling)')
@@ -321,13 +408,14 @@ def main():
     #                         help='convert pages, extracted from pdf, like mono=2-10,15 gray=16 256=all')
     parser.add_option('-n', dest='no_merge',  action = "store_true", default=False,\
                              help='do not merge djvu pages to final djvu document')
+                             
     (opts, args) = parser.parse_args()
     
     ag = opts.ag
     dpi = opts.dpi
     ocrengine = opts.ocrengine
     ocrlanguage = opts.ocrlanguage
-    ocrjobs = opts.ocrjobs
+    jobs = opts.jobs
     usecodjvu = opts.usecodjvu
     usemini = opts.usemini
     usepro = opts.usepro
@@ -359,9 +447,9 @@ def main():
     c44 = "c44"
     gs="gswin32c"
     
-    mono_opt="-threshold 30% -type bilevel"
-    color256_opt="-colors 256"
-    gray_opt="-colorspace Gray -gamma 1.0 -normalize -level 27%,76%"
+    #mono_opt="-threshold 30% -type bilevel"
+    #color256_opt="-colors 256"
+    #gray_opt="-colorspace Gray -gamma 1.0 -normalize -level 27%,76%"
     
     ### Checks
     if in_dir is None:
@@ -434,7 +522,7 @@ def main():
     if verbose:
         minidjvu += " -v"
         cpaldjvu += " -verbose"
-        
+    
     ### START!
     if pdf:
         tmp_dir = tempfile.mkdtemp(dir=out_dir)
@@ -446,12 +534,13 @@ def main():
         tmp_dir = out_dir
         
     if usemini < 1:
-        nomini(in_dir, tmp_dir, out_djvu, no_merge)
+        nomini(out_djvu, no_merge)
     else:
-        mini(in_dir, tmp_dir, out_djvu, no_merge)
+        mini(out_djvu, no_merge)
     
     if pdf and tmp_dir != out_dir and not keep:
         shutil.rmtree(tmp_dir)
         
 if __name__ == "__main__":
-    main()    
+    main()
+    
