@@ -16,6 +16,8 @@ import tempfile, shutil
 from distutils import spawn
 from time import sleep
 
+run = True
+
 def exit_error(msg):
     if msg:
         sys.stderr.write(msg)
@@ -153,6 +155,50 @@ def ocr(djvu):
         print("Starting OCR")
         subprocess.check_call([ ocrodjvu, "--engine", ocrengine, "--language", ocrlanguage, "--jobs", str(ocrjobs), "--in-place", "--on-error=resume",  djvu ])
 
+def nomini_process(in_dir, f, djvus):
+    inf = os.path.join(in_dir, f)
+    if is_djvu(inf):
+        djvus.append(inf)
+    else:
+        of = os.path.join(out_dir, f)
+        of_pnm = of + ".pnm"
+        of_djvu = of + ".djvu"
+        
+        if os.path.exists(of_djvu):
+            djvus.append(of_djvu)
+            return
+        try:
+            if not os.path.exists(of_pnm):
+                subprocess.check_call([ convert, inf, of_pnm ], shell=True)
+        
+            if int(call_out([ identify, "-format", "%z", of_pnm ])) > 1:
+                if treshold > 0:
+                    colors = int(call_out([ identify, "-format", "%k", of_pnm ]))
+                    if colors < treshold:
+                        cpaldjvucoder(of_pnm, of_djvu)
+                    else:
+                        colorcoder(of_pnm, of_djvu)
+                else:
+                    colorcoder(of_pnm, of_djvu)
+            else:
+                cjb2coder(of_pnm, of_djvu)
+            djvus.append(of_djvu)
+        except ValueError as e:
+            run = False
+            raise ValueError("can't identify {:s}: %s\n".format(inf, str(e)))
+        except Exception as e:
+            run = False
+            if os.path.exists(of_djvu):
+                sleep(1)
+                os.remove(of_djvu)
+            if os.path.exists(of_pnm):
+                sleep(1)
+                os.remove(of_pnm)
+            raise e
+        finally:
+            if os.path.exists(of_pnm):
+                os.remove(of_pnm)
+        
 ### General coder and bundler
 # convert all pages to pnm: convert
 # determine color depth of each page
@@ -171,49 +217,8 @@ def nomini(in_dir, out_dir, out_djvu, no_merge):
     djvus = [ ]
     pg = 0
     for f in files:
+        nomini_process(in_dir, f, djvus)
         pg += 1
-        inf = os.path.join(in_dir, f)
-        if is_djvu(inf):
-            djvus.append(inf)
-        else:
-            of = os.path.join(out_dir, f)
-            of_pnm = of + ".pnm"
-            of_djvu = of + ".djvu"
-            
-            if os.path.exists(of_djvu):
-                djvus.append(of_djvu)
-                continue
-            try:
-                if not os.path.exists(of_pnm):
-                    subprocess.check_call([ convert, inf, of_pnm ], shell=True)
-            
-                if int(call_out([ identify, "-format", "%z", of_pnm ])) > 1:
-                    if treshold > 0:
-                        colors = int(call_out([ identify, "-format", "%k", of_pnm ]))
-                        if colors < treshold:
-                            cpaldjvucoder(of_pnm, of_djvu)
-                        else:
-                            colorcoder(of_pnm, of_djvu)
-                    else:
-                        colorcoder(of_pnm, of_djvu)
-                else:
-                    cjb2coder(of_pnm, of_djvu)
-                djvus.append(of_djvu)
-            except ValueError as e:
-                exit_error("can't identify {:s}\n".format(inf))
-            except KeyboardInterrupt:
-                if os.path.exists(of_djvu):
-                    sleep(1)
-                    os.remove(of_djvu)
-                exit_error("interrupted\n")
-                if os.path.exists(of_pnm):
-                    sleep(1)
-                    os.remove(of_pnm)                
-            finally:
-                if os.path.exists(of_pnm):
-                    os.remove(of_pnm)
-        # end else if is_djvu(inf)
-        
         if pg % 10 == 0:
             print("processed {:d} files".format(pg))
     
