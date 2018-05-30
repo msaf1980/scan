@@ -23,13 +23,16 @@ from PyQt5.QtCore import Qt, QSize, QRect, QPoint
 from PIL import Image
 from PIL.ImageQt import ImageQt
 
-gs_threshold = 80
+bw_threshold = 80
+
+def rgb_to_grayscale(r, g, b):
+    return (r * 299 + g * 587 + b * 114) // 1000
 
 def pixel_info(img, x, y):
     pix = img.getpixel((x, y))
     s = str(pix)
     if img.mode in ("RGB", "RGBA"):
-        gray = (pix[0] * 299 + pix[1] * 587 + pix[2] * 114) // 1000
+        gray = rgb_to_grayscale(pix[0], pix[1], pix[2])
         s += ", as gray %d" % gray
     return s
 
@@ -375,7 +378,7 @@ class App(QWidget):
         return
         
     def process_bw(self):
-        global gs_threshold
+        global bw_threshold
         if not self.img.mode in ("RGB", "RGBA", "P", "L") or len(self.list_srect.s_ranges) == 0:
             self.list_srect.clear()
             return
@@ -391,26 +394,26 @@ class App(QWidget):
                 x = self.list_srect.s_ranges[n].x1
                 while x <= self.list_srect.s_ranges[n].x2 and x < width:
                     if self.img.mode in ("L", "P"):
-                        if pix[x, y] >= gs_threshold:
+                        if pix[x, y] >= bw_threshold:
                             pix[x, y] = 255
                         else:
                             pix[x, y] = 0
                     elif self.img.mode == "RGBA":
                         (r, g, b, a) = pix[x, y]
-                        bw = (r * 299 + g * 587 + b * 114) // 1000
-                        pix[x, y] = (bw, bw, bw, a)
-                    else:
-                        (r, g, b) = pix[x, y]
-                        bw = (r * 299 + g * 587 + b * 114) // 1000
-                        if bw >= gs_threshold:
+                        bw = rgb_to_grayscale(r, b, b)
+                        if bw >= bw_threshold:
                             bw = 255
                         else:
                             bw = 0
-                            
-                        if self.img.mode == "P":
-                            pix[x, y] = bw
+                        pix[x, y] = (bw, bw, bw, a)
+                    else:
+                        (r, g, b) = pix[x, y]
+                        bw = rgb_to_grayscale(r, b, b)
+                        if bw >= bw_threshold:
+                            bw = 255
                         else:
-                            pix[x, y] = (bw, bw, bw)
+                            bw = 0
+                        pix[x, y] = (bw, bw, bw)
                     x += 1
                 y += 1
             n += 1
