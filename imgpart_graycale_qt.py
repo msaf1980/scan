@@ -30,15 +30,7 @@ def pixel_info(img, x, y):
     s = str(pix)
     if img.mode in ("RGB", "RGBA"):
         gray = (pix[0] * 299 + pix[1] * 587 + pix[2] * 114) // 1000
-        s += ", gray %d" % gray
-    #    return "%d" % pix[x, y]
-    #elif mode == "P":
-    #    return "Color"
-    #elif mode == "L":
-    #    return "Grayscale"
-    #else:
-    #    return mode
-    
+        s += ", as gray %d" % gray
     return s
 
 def img_mode(mode):
