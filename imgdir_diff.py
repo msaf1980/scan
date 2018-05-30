@@ -9,6 +9,11 @@
 #
 #   For example, to compare Scan Tailor results with 2-pages splited images, use:
 #       imgdir_diff.py [ sourcedir | startfile ] outdir
+#
+#   Hotkeys:
+#       Ctrl+P  Prev
+#       Ctrl+N  Next
+#       Ctrl+R  Reload
 
 import sys
 import os
@@ -29,7 +34,17 @@ def strip_sidename(filename):
     else:
         return fname
 
-       
+def img_mode(mode):
+    if mode == "1":
+        return "B&W"
+    elif mode == "P":
+        return "Color"
+    elif mode == "L":
+        return "Grayscale"
+    else:
+        return mode
+
+        
 class App(QWidget):
  
     def __init__(self, app, name1, name2):
@@ -77,7 +92,7 @@ class App(QWidget):
 
     def initUI_H(self):
         self.setGeometry(self.left, self.top, self.width, self.height)
-        self.iwidth = self.width / 2
+        self.iwidth = self.width // 2
         self.iheight = self.height
 
         layout = QVBoxLayout()
@@ -175,9 +190,9 @@ class App(QWidget):
         pixmap = QPixmap.fromImage(qim).scaled(img.size[0] // aspect, img.size[1] // aspect, Qt.KeepAspectRatio,Qt.SmoothTransformation)
         img_label.setPixmap(pixmap)
         if fileindx < 0:
-            status_label.setText("(%d) %s (%s %s [%d:%d])" % (length, filename, img.mode, img.format, img.size[0], img.size[1]))
+            status_label.setText("(%d) %s (%s %s [%d:%d])" % (length, filename, img_mode(img.mode), img.format, img.size[0], img.size[1]))
         else:
-            status_label.setText("(%d:%d) %s (%s %s [%d:%d])" % (length, fileindx, filename, img.mode, img.format, img.size[0], img.size[1]))
+            status_label.setText("(%d:%d) %s (%s %s [%d:%d])" % (length, fileindx, filename, img_mode(img.mode), img.format, img.size[0], img.size[1]))
             
     def display_indx(self, img_label, status_label, dirlist, fileindx):
         if fileindx < 0 or len(dirlist) == 0:
@@ -234,7 +249,7 @@ class App(QWidget):
                 elif g == 0:
                     # Next bin search iter
                     b = p
-                    p = int(a + (b - a) / 2)
+                    p = a + (b - a) // 2
                 else: 
                     return 0
             else:
@@ -243,7 +258,7 @@ class App(QWidget):
                 elif g == 0:
                     # Next bin search iter
                     a = p
-                    p = int(a + (b - a) / 2)
+                    p = a + (b - a) // 2
                 else:
                     a = p
                     p += 1
@@ -321,3 +336,5 @@ if __name__ == '__main__':
         sys.exit(1)
     
     sys.exit(app.exec_())
+
+    

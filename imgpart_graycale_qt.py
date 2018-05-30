@@ -3,16 +3,55 @@
 # Converted selected regions to grayscale, black & white or white
 # Useful for clean scan processing results
 # Install Qt5 and PIL (or Pillow)
-
+# Hotkeys:
+#   Select:
+#        Ctrl+D     Del selected regions
+#        Ctrl+E     Reset all regions
+#        Ctrl+A     Select All
+#   Process:
+#        Ctrl+G     Process selected regions to Grayscale
+#        Ctrl+B     Process selected regions to Black and White
+#        Ctrl+W     Process selected regions to White
+#
+#   Mouse Right Button click display selected pixel info
+        
 import sys
 import os
 from PyQt5.QtWidgets import *
-from PyQt5.QtGui import QIcon, QPixmap
+from PyQt5.QtGui import QIcon, QPixmap, QKeySequence
 from PyQt5.QtCore import Qt, QSize, QRect, QPoint
 from PIL import Image
 from PIL.ImageQt import ImageQt
-import colorsys
 
+gs_threshold = 80
+
+def pixel_info(img, x, y):
+    pix = img.getpixel((x, y))
+    s = str(pix)
+    if img.mode in ("RGB", "RGBA"):
+        gray = (pix[0] * 299 + pix[1] * 587 + pix[2] * 114) // 1000
+        s += ", gray %d" % gray
+    #    return "%d" % pix[x, y]
+    #elif mode == "P":
+    #    return "Color"
+    #elif mode == "L":
+    #    return "Grayscale"
+    #else:
+    #    return mode
+    
+    return s
+
+def img_mode(mode):
+    if mode == "1":
+        return "B&W"
+    elif mode == "P":
+        return "Color"
+    elif mode == "L":
+        return "Grayscale"
+    else:
+        return mode
+
+        
 class Range:
     def __init__(self, rband, aratio):
         self.rband = rband
@@ -51,6 +90,8 @@ class QListWidgetRange(QListWidget):
         self.parent().enable_s_rect_button()
         
     def removeSelectedItems(self):
+        if len(self.s_ranges) == 0:
+            return
         model = self.model()
         for selectedItem in self.selectedItems():
             qIndex = self.indexFromItem(selectedItem)
@@ -72,12 +113,14 @@ class QListWidgetRange(QListWidget):
     def clear(self):
         super(QListWidgetRange, self).clear()
         n = 0
-        while n < len(self.s_ranges):
-            #print("removing : %d" % n)
-            self.s_ranges[n].rband.hide()
-            n += 1
+        if len(self.s_ranges) > 0:
+            while n < len(self.s_ranges):
+                #print("removing : %d" % n)
+                self.s_ranges[n].rband.hide()
+                n += 1
         
-        self.s_ranges = list()
+            self.s_ranges = list()
+            
         self.parent().enable_s_rect_button(False)
         
         
@@ -121,6 +164,8 @@ class QLabelRect(QLabel):
                 self.origin = None
                 #self.rubberBand.hide()
                 self.rubberBand = QRubberBand(QRubberBand.Rectangle, self)
+        elif not self.parent() is None:
+            self.parent().display_pixel(event.pos().x() * self.parent().aspect, event.pos().y() * self.parent().aspect)
                 
     def select_all(self):
         self.rubberBand = QRubberBand(QRubberBand.Rectangle, self)
@@ -182,8 +227,11 @@ class App(QWidget):
                 if fname == filename:
                     i = n
                 n += 1
-        print("%d %d %s" % (i, n, filename)) 
-        return i
+        #print("%d %d %s" % (i, n, filename)) 
+        if len(self.dirlist) > 0 and i == -1:
+            return 0
+        else:
+            return i
     
     def open(self, filename = None):
         if not filename is None:
@@ -191,24 +239,17 @@ class App(QWidget):
         elif self.filename is None:
             return
         self.img = Image.open(self.filename)
-        #if self.img.mode in ('P', 'L'):
-        #    self.img = self.img.convert('RGB')
-        #elif self.img.format == "PNG":
-        #    self.set_changed(True)
-        #else:
+       
         self.set_changed(False)
 
-        #.convert('RGB')
         (width, height) = self.img.size
-        #self.img_process = None
         
         self.display()
         
-        #self.resize(pixmap.width(),pixmap.height())
-        
         self.rect = list()
         self.setWindowTitle(self.title + " " + self.filename)
-        self.status_bar.showMessage("%s %s: %s" % (self.img.mode, self.img.format, self.filename))
+        
+        self.status_bar.showMessage("%s %s [%d:%d] %s" % (img_mode(self.img.mode), self.img.format, self.img.size[0], self.img.size[1], self.filename))
         
         self.enable_s_rect_button(False)
         
@@ -229,7 +270,13 @@ class App(QWidget):
         
         pixmap = QPixmap.fromImage(qim).scaled(self.img.size[0] // self.aspect, self.img.size[1] // self.aspect, Qt.KeepAspectRatio,Qt.SmoothTransformation)
         self.img_label.setPixmap(pixmap)
-        
+
+    def display_pixel(self, x, y):
+        if self.img is None or x >= self.img.size[0] or y >= self.img.size[1]:
+            self.status_bar2.showMessage("")
+        else:
+            self.status_bar2.showMessage("[%d:%d] = %s" % (x, y, pixel_info(self.img, x, y)))
+    
     def check_prev_next(self):
         #print("%d %d" % (self.index, len(self.dirlist)))
         if self.index == -1:
@@ -246,10 +293,20 @@ class App(QWidget):
             self.next_button.setEnabled(True)
         
     def enable_s_rect_button(self, e = True):
+    
         self.del_button.setEnabled(e)
         self.reset_button.setEnabled(e)
-        self.process_gs_button.setEnabled(False if self.img is None or self.img.mode == "1" else e)
-        self.process_bw_button.setEnabled(False if self.img is None or self.img.mode == "1" else e)
+        if self.img is None or not self.img.mode in ("RGB", "RGBA", "P") or len(self.list_srect.s_ranges) == 0:
+            gs = False
+        else:
+            gs = e
+        self.process_gs_button.setEnabled(gs)
+        if self.img is None or self.img.mode == "1" or len(self.list_srect.s_ranges) == 0:
+            bw = False
+        else:
+            bw = e
+        self.process_bw_button.setEnabled(bw)
+        
         self.process_w_button.setEnabled(e)
 
     def set_changed(self, e = True):
@@ -270,17 +327,22 @@ class App(QWidget):
     def prev(self):
         if self.index > 0:
             self.index -= 1
+            self.reset_s_ranges()
             self.open(self.dirlist[self.index])
         self.check_prev_next()
         
     def next(self):
         if self.index < len(self.dirlist) - 1:
             self.index += 1
+            self.reset_s_ranges()
             self.open(self.dirlist[self.index])
         self.check_prev_next()
         
     def process_grayscale(self):
-        self.set_changed()    
+        if not self.img.mode in ("RGB", "RGBA", "P") or len(self.list_srect.s_ranges) == 0:
+            self.list_srect.clear()
+            return
+        self.set_changed()
         n = 0
         pix = self.img.load()
         (width, height) = self.img.size
@@ -291,11 +353,27 @@ class App(QWidget):
             while y <= self.list_srect.s_ranges[n].y2 and y < height:
                 x = self.list_srect.s_ranges[n].x1
                 while x <= self.list_srect.s_ranges[n].x2 and x < width:
-                    (r, g, b) = pix[x, y]
+                    if self.img.mode == "P":
+                        #r = (pix[x, y] >> 5) * 32
+                        #g = ((pix[x, y] & 28) >> 2) * 32
+                        #b = (pix[x, y] & 3) * 64      
+                        
+                        #r = (pix[x, y] >> 5) * 255 // 7
+                        #g = ((pix[x, y] >> 2) & 0x07) * 255 // 7
+                        #b = (pix[x, y] & 0x03) * 255 // 3
+                        
+                        r = pix[x, y]
+                        g = pix[x, y]
+                        b = pix[x, y]
+                    else:
+                        (r, g, b) = pix[x, y]
                     #gray = int((r + g + b) / 3)
                     #gray = int(0.2989 * r + 0.5870 * g + 0.1140 * b)
                     gray = (r * 299 + g * 587 + b * 114) // 1000
-                    pix[x, y] = (gray, gray, gray)
+                    if self.img.mode == "P":
+                        pix[x, y] = gray
+                    else:
+                        pix[x, y] = (gray, gray, gray)
                     x += 1
                 y += 1
             n += 1
@@ -304,7 +382,11 @@ class App(QWidget):
         self.list_srect.clear()
         return
         
-    def process_bw(self, threshold=28):
+    def process_bw(self):
+        global gs_threshold
+        if not self.img.mode in ("RGB", "RGBA", "P", "L") or len(self.list_srect.s_ranges) == 0:
+            self.list_srect.clear()
+            return
         self.set_changed()    
         n = 0
         pix = self.img.load()
@@ -316,9 +398,27 @@ class App(QWidget):
             while y <= self.list_srect.s_ranges[n].y2 and y < height:
                 x = self.list_srect.s_ranges[n].x1
                 while x <= self.list_srect.s_ranges[n].x2 and x < width:
-                    (r, g, b) = pix[x, y]
-                    bw = (r * 299 + g * 587 + b * 114) // 1000
-                    pix[x, y] = (bw, bw, bw)
+                    if self.img.mode in ("L", "P"):
+                        if pix[x, y] >= gs_threshold:
+                            pix[x, y] = 255
+                        else:
+                            pix[x, y] = 0
+                    elif self.img.mode == "RGBA":
+                        (r, g, b, a) = pix[x, y]
+                        bw = (r * 299 + g * 587 + b * 114) // 1000
+                        pix[x, y] = (bw, bw, bw, a)
+                    else:
+                        (r, g, b) = pix[x, y]
+                        bw = (r * 299 + g * 587 + b * 114) // 1000
+                        if bw >= gs_threshold:
+                            bw = 255
+                        else:
+                            bw = 0
+                            
+                        if self.img.mode == "P":
+                            pix[x, y] = bw
+                        else:
+                            pix[x, y] = (bw, bw, bw)
                     x += 1
                 y += 1
             n += 1
@@ -328,6 +428,9 @@ class App(QWidget):
         return
         
     def process_w(self):
+        if not self.img.mode in ("RGB", "RGBA", "P", "L", "1") and len(self.list_srect.s_ranges) == 0:
+            self.list_srect.clear()
+            return
         self.set_changed()    
         n = 0
         pix = self.img.load()
@@ -339,8 +442,11 @@ class App(QWidget):
             while y <= self.list_srect.s_ranges[n].y2 and y < height:
                 x = self.list_srect.s_ranges[n].x1
                 while x <= self.list_srect.s_ranges[n].x2 and x < width:
-                    if self.img.mode == "1":
+                    if self.img.mode in ("1", "P", "L"):
                         pix[x, y] = 255
+                    elif self.img.mode == "RGBA":
+                        (r, g, b, a) = pix[x, y]
+                        pix[x, y] = (255, 255, 255, a)
                     else:
                         pix[x, y] = (255, 255, 255)
                     x += 1
@@ -374,6 +480,8 @@ class App(QWidget):
         self.set_changed(False)
     
     def reload(self):
+        self.read_dir(self.filename)
+        self.reset_s_ranges()
         self.open()
         
     def initUI(self, filename):
@@ -399,49 +507,83 @@ class App(QWidget):
         vbox2.addWidget(self.list_srect)
         
         hbox2_2 = QHBoxLayout()
+        
         self.del_button = QPushButton("Del")
         self.del_button.clicked.connect(self.delete_s_ranges)
+        shortcut = QShortcut(QKeySequence("Ctrl+D"), self)
+        shortcut.activated.connect(self.delete_s_ranges)
         hbox2_2.addWidget(self.del_button)
+        
         self.reset_button = QPushButton("Reset")
         self.reset_button.clicked.connect(self.reset_s_ranges)
+        shortcut = QShortcut(QKeySequence("Ctrl+E"), self)
+        shortcut.activated.connect(self.reset_s_ranges)        
         hbox2_2.addWidget(self.reset_button)
         self.select_all_button = QPushButton("Select All")
         self.select_all_button.clicked.connect(self.select_all)
+        shortcut = QShortcut(QKeySequence("Ctrl+A"), self)
+        shortcut.activated.connect(self.select_all) 
         hbox2_2.addWidget(self.select_all_button)
         self.process_gs_button = QPushButton("Process Gs")
         self.process_gs_button.clicked.connect(self.process_grayscale)
+        shortcut = QShortcut(QKeySequence("Ctrl+G"), self)
+        shortcut.activated.connect(self.process_grayscale)
         hbox2_2.addWidget(self.process_gs_button)
         self.process_bw_button = QPushButton("Process BW")
         self.process_bw_button.clicked.connect(self.process_bw)
+        shortcut = QShortcut(QKeySequence("Ctrl+B"), self)
+        shortcut.activated.connect(self.process_bw)
         hbox2_2.addWidget(self.process_bw_button)
         self.process_w_button = QPushButton("Process W")
         self.process_w_button.clicked.connect(self.process_w)
+        shortcut = QShortcut(QKeySequence("Ctrl+W"), self)
+        shortcut.activated.connect(self.process_w)
         hbox2_2.addWidget(self.process_w_button)
         vbox2.addLayout(hbox2_2)
 
         self.enable_s_rect_button(False)
         
         hbox2_3 = QHBoxLayout() 
+        
         self.save_button = QPushButton("Save")
         self.save_button.clicked.connect(self.save)
+        shortcut = QShortcut(QKeySequence("Ctrl+S"), self)
+        shortcut.activated.connect(self.save)
         hbox2_3.addWidget(self.save_button)
+        
         self.reload_button = QPushButton("Reload")
         self.reload_button.clicked.connect(self.reload)
+        shortcut = QShortcut(QKeySequence("Ctrl+R"), self)
+        shortcut.activated.connect(self.reload)
         hbox2_3.addWidget(self.reload_button)
+        
         vbox2.addLayout(hbox2_3)
         
         hbox2_4 = QHBoxLayout() 
+        
         self.prev_button = QPushButton("Prev")
         self.prev_button.clicked.connect(self.prev)
+        shortcut = QShortcut(QKeySequence("Ctrl+P"), self)
+        shortcut.activated.connect(self.prev)
         hbox2_4.addWidget(self.prev_button)
+        
         self.next_button = QPushButton("Next")
         self.next_button.clicked.connect(self.next)
+        shortcut = QShortcut(QKeySequence("Ctrl+N"), self)
+        shortcut.activated.connect(self.next)
         hbox2_4.addWidget(self.next_button)
+        
         vbox2.addLayout(hbox2_4)
         
+        hbox2_5 = QHBoxLayout() 
+        
         self.status_bar = QStatusBar()
-        vbox2.addWidget(self.status_bar)
-
+        hbox2_5.addWidget(self.status_bar)
+        
+        self.status_bar2 = QStatusBar()
+        hbox2_5.addWidget(self.status_bar2)
+        
+        vbox2.addLayout(hbox2_5)
         
         self.set_changed(False)
         
@@ -453,8 +595,8 @@ class App(QWidget):
         
         self.setLayout(layout)
         
-        if not filename is None:
-            self.open(filename)
+        if self.index >= 0:
+            self.open(self.dirlist[self.index])
 
         self.show()
 
