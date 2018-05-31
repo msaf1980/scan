@@ -213,7 +213,7 @@ def nomini_process(f):
         except Exception:
             if os.path.exists(of_djvu):
                 os.remove(of_djvu)
-            return (inf, None, "failed process %s\n%s" % (f, traceback.format_exc() ))
+            return (inf, None, "failed process %s\n%s" % (f, traceback.format_exc()))
         finally:
             if os.path.exists(of_pnm):
                 os.remove(of_pnm)
@@ -264,14 +264,14 @@ def nomini(out_djvu, no_merge):
                 if djvu is None:
                     running = False
                     res  = 1
-                    sys.stderr.write(err)
+                    sys.stderr.write("%s not converted: %s\n" % err)
                 else:
                     djvus.append(djvu)
                     pg += 1
             except queue.Empty:
                 pass
             except Exception as e:
-                sys.stderr.write("%s" % traceback.format_exc())
+                sys.stderr.write("%s\n" % traceback.format_exc())
                 running = False
                 res = 1
 
@@ -285,7 +285,7 @@ def nomini(out_djvu, no_merge):
                 (inf, djvu, err) = queue_out.get(False)
                 if djvu is None:
                     res  = 1
-                    sys.stderr.write(err)
+                    sys.stderr.write("%s not converted: %s\n" % err)
                 else:
                     djvus.append(djvu)
                     pg += 1
