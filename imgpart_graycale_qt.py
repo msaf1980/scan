@@ -384,6 +384,8 @@ class App(QWidget):
             return
         self.set_changed()    
         n = 0
+        bw_threshold = self.bw_threshold_edit.value()
+        print(bw_threshold)
         pix = self.img.load()
         (width, height) = self.img.size
         while n < len(self.list_srect.s_ranges):
@@ -551,6 +553,17 @@ class App(QWidget):
         shortcut = QShortcut(QKeySequence("Ctrl+R"), self)
         shortcut.activated.connect(self.reload)
         hbox2_3.addWidget(self.reload_button)
+
+        bw_threshold_label = QLabel("BW threshold")
+        bw_threshold_label.setMaximumWidth(100)
+        hbox2_3.addWidget(bw_threshold_label)
+        self.bw_threshold_edit = QSpinBox()
+        self.bw_threshold_edit.setMaximumWidth(100)
+        self.bw_threshold_edit.setMinimum(0)
+        self.bw_threshold_edit.setMaximum(255)
+        self.bw_threshold_edit.setSingleStep(1)
+        self.bw_threshold_edit.setValue(80)
+        hbox2_3.addWidget(self.bw_threshold_edit)
         
         vbox2.addLayout(hbox2_3)
         
