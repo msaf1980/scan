@@ -268,9 +268,6 @@ def nomini(out_djvu, no_merge):
                 else:
                     djvus.append(djvu)
                     pg += 1
-                    if pg % 10 == 0:
-                        sys.stdout.write("processed {:d} files\n".format(pg))
-                        sys.stdout.flush()
             except queue.Empty:
                 pass
             except Exception as e:
