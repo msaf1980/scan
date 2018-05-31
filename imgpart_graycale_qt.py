@@ -23,8 +23,6 @@ from PyQt5.QtCore import Qt, QSize, QRect, QPoint
 from PIL import Image
 from PIL.ImageQt import ImageQt
 
-bw_threshold = 80
-
 def rgb_to_grayscale(r, g, b):
     return (r * 299 + g * 587 + b * 114) // 1000
 
@@ -378,14 +376,12 @@ class App(QWidget):
         return
         
     def process_bw(self):
-        global bw_threshold
         if not self.img.mode in ("RGB", "RGBA", "P", "L") or len(self.list_srect.s_ranges) == 0:
             self.list_srect.clear()
             return
         self.set_changed()    
         n = 0
         bw_threshold = self.bw_threshold_edit.value()
-        print(bw_threshold)
         pix = self.img.load()
         (width, height) = self.img.size
         while n < len(self.list_srect.s_ranges):
