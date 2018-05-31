@@ -293,6 +293,8 @@ def nomini(out_djvu, no_merge):
                         print("processed {:d} files".format(pg))
         except queue.Empty:
             pass
+            
+        print("processed {:d} files".format(pg))
         sys.exit(res)
     else:
         for f in files:
@@ -304,6 +306,8 @@ def nomini(out_djvu, no_merge):
             pg += 1
             if pg % 10 == 0:
                     print("processed {:d} files".format(pg))
+                    
+        print("processed {:d} files".format(pg))
         djvus.sort()
     
     if no_merge:
