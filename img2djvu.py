@@ -230,10 +230,10 @@ class NoMiniProcess(threading.Thread):
             f = self._queue_in.get()
             if f == 'quit' or not running:
                 break
-            djvu = nomini_process(f)
-            if djvu is None:
+            out = nomini_process(f)
+            if out[1] is None:
                 running = False
-            self._queue_in.put((f, djvu))
+            self._queue_out.put(out)
             
 ### General coder and bundler
 # convert all pages to pnm: convert
