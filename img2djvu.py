@@ -251,7 +251,7 @@ def nomini(out_djvu, no_merge):
     pgcount = len(files)
     if pgcount == 0:
         exit_error("input files not found")
-    print("processing {:d} files".format(pgcount))
+    sys.stdout.write("processing {:d} files\n".format(pgcount))
     pg = 0
     djvus = [ ]
     if jobs >  1:
@@ -268,7 +268,8 @@ def nomini(out_djvu, no_merge):
                 else:
                     pg += 1
                     if pg % 10 == 0:
-                        print("processed {:d} files".format(pg))
+                        sys.stdout.write("processed {:d} files\n".format(pg))
+                        sys.stdout.flush()
             except queue.Empty:
                 pass
             except Exception as e:
@@ -290,11 +291,14 @@ def nomini(out_djvu, no_merge):
                 else:
                     pg += 1
                     if pg % 10 == 0:
-                        print("processed {:d} files".format(pg))
+                        sys.stdout.write("processed {:d} files\n".format(pg))
+                        sys.stdout.flush()
         except queue.Empty:
             pass
             
-        print("processed {:d} files".format(pg))
+        if err == 0:
+            sys.stdout.write("processed {:d} files\n".format(pg))
+            sys.stdout.flush()
         sys.exit(res)
     else:
         for f in files:
@@ -305,9 +309,9 @@ def nomini(out_djvu, no_merge):
             djvus.append(djvu)
             pg += 1
             if pg % 10 == 0:
-                    print("processed {:d} files".format(pg))
+                    sys.stdout.write("processed {:d} files\n".format(pg))
                     
-        print("processed {:d} files".format(pg))
+        sys.stdout.write("processed {:d} files\n".format(pg))
         djvus.sort()
     
     if no_merge:
