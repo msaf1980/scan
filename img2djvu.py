@@ -266,6 +266,7 @@ def nomini(out_djvu, no_merge):
                     res  = 1
                     sys.stderr.write(err)
                 else:
+                    djvus.append(djvu)
                     pg += 1
                     if pg % 10 == 0:
                         sys.stdout.write("processed {:d} files\n".format(pg))
@@ -289,6 +290,7 @@ def nomini(out_djvu, no_merge):
                     res  = 1
                     sys.stderr.write(err)
                 else:
+                    djvus.append(djvu)
                     pg += 1
                     if pg % 10 == 0:
                         sys.stdout.write("processed {:d} files\n".format(pg))
@@ -296,10 +298,11 @@ def nomini(out_djvu, no_merge):
         except queue.Empty:
             pass
             
-        if err == 0:
+        if res == 0:
             sys.stdout.write("processed {:d} files\n".format(pg))
             sys.stdout.flush()
-        sys.exit(res)
+        else:
+            sys.exit(res)
     else:
         for f in files:
             (f, djvu, err) = nomini_process(f)
@@ -312,10 +315,11 @@ def nomini(out_djvu, no_merge):
                     sys.stdout.write("processed {:d} files\n".format(pg))
                     
         sys.stdout.write("processed {:d} files\n".format(pg))
-        djvus.sort()
-    
+        
     if no_merge:
         return
+        
+    djvus.sort()
     cmd_args = [ djvm, "-c",  out_djvu ]
     cmd_args.extend(djvus)
     subprocess.check_call(cmd_args)
