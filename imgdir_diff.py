@@ -157,7 +157,8 @@ class App(QWidget):
         else:
             self.i1 -= 1
             (self.fname2, self.i2) = self.find_map(self.dirlist1[self.i1], self.dirmap2)
-            self.i2 = len(self.dirmap2[self.fname2]) - 1
+            if not self.fname2 is None:
+                self.i2 = len(self.dirmap2[self.fname2]) - 1
             
         self.load()
         
