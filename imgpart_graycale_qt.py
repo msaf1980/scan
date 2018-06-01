@@ -12,6 +12,7 @@
 #        Ctrl+G     Process selected regions to Grayscale
 #        Ctrl+B     Process selected regions to Black and White
 #        Ctrl+W     Process selected regions to White
+#        Ctrl+I     Process unselected region (only one) to White
 #
 #   Mouse Right Button click display selected pixel info
         
@@ -34,15 +35,23 @@ def pixel_info(img, x, y):
         s += ", as gray %d" % gray
     return s
 
-def img_mode(mode):
-    if mode == "1":
+def img_mode(img):
+    if img.mode == "1":
         return "B&W"
-    elif mode == "P":
+    elif img.mode == "P":
+        #print(len(self.img.getcolors()))
+        if img.format == "PNG" and img.mode == "P" and len(img.getcolors()) == 2:
+            # Fix for display 1-bit monochrome png as P
+            #print(self.img.getcolors()[0][1])
+            #print(self.img.getcolors()[1][1])
+            if img.getcolors()[0][1] == 0 and img.getcolors()[1][1] == 1:
+                return "B&W"
+                
         return "Color"
-    elif mode == "L":
+    elif img.mode == "L":
         return "Grayscale"
     else:
-        return mode
+        return img.mode
 
         
 class Range:
@@ -137,25 +146,9 @@ class QLabelRect(QLabel):
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton:
             if not self.origin is None:
-                #(x1, y1, x2, y2) = self.rubberBand.geometry().getCoords()
-                #if x1 < 0:
-                #    x1 = 0
-                #else:
-                #    x1 = int(x1 * self.parentWidget().aspect)
-                #if y1 < 0:
-                #    y1 = 0
-                #else:
-                #    y1 = int(y1 * self.parentWidget().aspect)
-                #x2 = int(x2 * self.parentWidget().aspect)
-                #y2 = int(y2 * self.parentWidget().aspect)
-                #print("%d:%d %d:%d %f" % (x1, y1, x2, y2, self.parent().aspect))
-                
                 r = Range(self.rubberBand, self.parent().aspect)
                 self.parent().list_srect.addItem(r)
-                #print("%d %d:%d %f" % (r.x1, r.y1, r.x2, r.y2, self.parent().aspect))
-                
                 self.origin = None
-                #self.rubberBand.hide()
                 self.rubberBand = QRubberBand(QRubberBand.Rectangle, self)
         elif not self.parent() is None:
             self.parent().display_pixel(event.pos().x() * self.parent().aspect, event.pos().y() * self.parent().aspect)
@@ -241,8 +234,7 @@ class App(QWidget):
         
         self.rect = list()
         self.setWindowTitle(self.title + " " + self.filename)
-        
-        self.status_bar.showMessage("%s %s [%d:%d] %s" % (img_mode(self.img.mode), self.img.format, self.img.size[0], self.img.size[1], self.filename))
+        self.status_bar.showMessage("%s %s [%d:%d] %s" % (img_mode(self.img), self.img.format, self.img.size[0], self.img.size[1], self.filename))
         
         self.enable_s_rect_button(False)
         
@@ -254,11 +246,8 @@ class App(QWidget):
         s_width = self.img_label.width()
         s_height = self.img_label.height()
 
-        #print("%s / %s" % (self.img.size[0], s_width))
-        #print("%s / %s" % (self.img.size[1], s_height))
         aspect_w = float(self.img.size[0]) / s_width
         aspect_h = float(self.img.size[1]) / s_height
-        #print("%f %f" % (aspect_w, aspect_h))
         self.aspect = aspect_w if aspect_w > aspect_h else aspect_h
         
         pixmap = QPixmap.fromImage(qim).scaled(self.img.size[0] // self.aspect, self.img.size[1] // self.aspect, Qt.KeepAspectRatio,Qt.SmoothTransformation)
@@ -302,6 +291,12 @@ class App(QWidget):
         
         self.process_w_button.setEnabled(e)
 
+        if self.img is None or self.img.mode == "1" or len(self.list_srect.s_ranges) != 1:
+            wi = False
+        else:
+            wi = e        
+        self.process_wi_button.setEnabled(e)
+
     def set_changed(self, e = True):
         self.changed = e
         self.save_button.setEnabled(e)
@@ -333,7 +328,6 @@ class App(QWidget):
         
     def process_grayscale(self):
         if not self.img.mode in ("RGB", "RGBA", "P") or len(self.list_srect.s_ranges) == 0:
-            self.list_srect.clear()
             return
         self.set_changed()
         n = 0
@@ -347,21 +341,11 @@ class App(QWidget):
                 x = self.list_srect.s_ranges[n].x1
                 while x <= self.list_srect.s_ranges[n].x2 and x < width:
                     if self.img.mode == "P":
-                        #r = (pix[x, y] >> 5) * 32
-                        #g = ((pix[x, y] & 28) >> 2) * 32
-                        #b = (pix[x, y] & 3) * 64      
-                        
-                        #r = (pix[x, y] >> 5) * 255 // 7
-                        #g = ((pix[x, y] >> 2) & 0x07) * 255 // 7
-                        #b = (pix[x, y] & 0x03) * 255 // 3
-                        
                         r = pix[x, y]
                         g = pix[x, y]
                         b = pix[x, y]
                     else:
                         (r, g, b) = pix[x, y]
-                    #gray = int((r + g + b) / 3)
-                    #gray = int(0.2989 * r + 0.5870 * g + 0.1140 * b)
                     gray = (r * 299 + g * 587 + b * 114) // 1000
                     if self.img.mode == "P":
                         pix[x, y] = gray
@@ -377,7 +361,6 @@ class App(QWidget):
         
     def process_bw(self):
         if not self.img.mode in ("RGB", "RGBA", "P", "L") or len(self.list_srect.s_ranges) == 0:
-            self.list_srect.clear()
             return
         self.set_changed()    
         n = 0
@@ -385,8 +368,6 @@ class App(QWidget):
         pix = self.img.load()
         (width, height) = self.img.size
         while n < len(self.list_srect.s_ranges):
-            #print("removing : %d" % n)
-            #print(self.list_srect.s_ranges[n].s)
             y = self.list_srect.s_ranges[n].y1
             while y <= self.list_srect.s_ranges[n].y2 and y < height:
                 x = self.list_srect.s_ranges[n].x1
@@ -421,8 +402,7 @@ class App(QWidget):
         return
         
     def process_w(self):
-        if not self.img.mode in ("RGB", "RGBA", "P", "L", "1") and len(self.list_srect.s_ranges) == 0:
-            self.list_srect.clear()
+        if not self.img.mode in ("RGB", "RGBA", "P", "L", "1") or len(self.list_srect.s_ranges) == 0:
             return
         self.set_changed()    
         n = 0
@@ -449,6 +429,35 @@ class App(QWidget):
         self.display()
         self.list_srect.clear()
         return
+
+    # Invert select range (only one)
+    def process_w_s_invert(self):
+        if not self.img.mode in ("RGB", "RGBA", "P", "L", "1") or len(self.list_srect.s_ranges) != 1:
+            return
+        self.set_changed()    
+        pix = self.img.load()
+        (width, height) = self.img.size
+        y = 0
+        while y < height:
+            x = 0
+            while x < width:
+                if x >= self.list_srect.s_ranges[0].x1 and x <= self.list_srect.s_ranges[0].x2 and \
+                       y >= self.list_srect.s_ranges[0].y1 and y <= self.list_srect.s_ranges[0].y2:
+                    x = self.list_srect.s_ranges[0].x2 + 1
+                    continue
+                if self.img.mode in ("P", "L"):
+                    pix[x, y] = 255
+                elif self.img.mode == "RGBA":
+                    (r, g, b, a) = pix[x, y]
+                    pix[x, y] = (255, 255, 255, a)
+                else:
+                    pix[x, y] = (255, 255, 255)
+                x += 1
+            y += 1
+            
+        self.display()
+        self.list_srect.clear()
+        return        
         
     def save(self):
         if not self.changed:
@@ -532,6 +541,12 @@ class App(QWidget):
         shortcut = QShortcut(QKeySequence("Ctrl+W"), self)
         shortcut.activated.connect(self.process_w)
         hbox2_2.addWidget(self.process_w_button)
+        self.process_wi_button = QPushButton("Process W I")
+        self.process_wi_button.clicked.connect(self.process_w_s_invert)
+        shortcut = QShortcut(QKeySequence("Ctrl+I"), self)
+        shortcut.activated.connect(self.process_w_s_invert)
+        hbox2_2.addWidget(self.process_wi_button)
+        
         vbox2.addLayout(hbox2_2)
 
         self.enable_s_rect_button(False)
