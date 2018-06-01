@@ -55,19 +55,26 @@ def img_mode(img):
 
         
 class Range:
-    def __init__(self, rband, aratio):
+    def __init__(self, rband, aratio, img):
+        (width, height) = img.size
         self.rband = rband
         (self.x1, self.y1, self.x2, self.y2) = self.rband.geometry().getCoords()
         if self.x1 < 0:
             self.x1 = 0
         else:
             self.x1 = int(self.x1 * aratio)
+
         if self.y1 < 0:
             self.y1 = 0
         else:
             self.y1 = int(self.y1 * aratio)
         self.x2 = int(self.x2 * aratio)
         self.y2 = int(self.y2 * aratio)
+
+        if self.x1 > width: self.x1 = width
+        if self.x2 > width: self.x2 = width
+        if self.y1 > height: self.y1 = height
+        if self.y2 > height: self.y2 = height
         
         self.s = "%d:%d %d:%d" % (self.x1, self.y1, self.x2, self.y2)
         
@@ -140,13 +147,13 @@ class QLabelRect(QLabel):
             self.rubberBand.show()
 
     def mouseMoveEvent(self, event):
-        if not self.origin.isNull():
+        if not self.origin is None and not self.origin.isNull():
             self.rubberBand.setGeometry(QRect(self.origin, event.pos()).normalized())
      
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton:
-            if not self.origin is None:
-                r = Range(self.rubberBand, self.parent().aspect)
+            if not self.origin is None and not self.parent().img is None:
+                r = Range(self.rubberBand, self.parent().aspect, self.parent().img)
                 self.parent().list_srect.addItem(r)
                 self.origin = None
                 self.rubberBand = QRubberBand(QRubberBand.Rectangle, self)
@@ -157,7 +164,7 @@ class QLabelRect(QLabel):
         self.rubberBand = QRubberBand(QRubberBand.Rectangle, self)
         self.rubberBand.setGeometry(0, 0, self.parent().img_label.width(), self.parent().img_label.height())
         self.rubberBand.show()
-        r = Range(self.rubberBand, self.parent().aspect)
+        r = Range(self.rubberBand, self.parent().aspect, self.parent().img)
         self.parent().list_srect.addItem(r)
         
         self.origin = None

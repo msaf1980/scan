@@ -22,6 +22,7 @@ def rgb_to_grayscale(r, g, b):
 def fill_xborder_b2w(pix, x1, y1, x2, y2):
     xdec = 1 if x2 >= x1 else -1
     ydec = 1 if y2 >= y1 else -1
+    changed = False
     x = x1        
     try:        
         while x != x2:
@@ -32,6 +33,7 @@ def fill_xborder_b2w(pix, x1, y1, x2, y2):
                 if img.mode in ("P", "L"):
                     if pix[x, y] == 0:
                         pix[x, y] = 255
+                        changed = True
                         #print("[%d:%d] => %s" % (x, y, str(pix[x, y])))
                     else:
                         t += 1
@@ -40,6 +42,7 @@ def fill_xborder_b2w(pix, x1, y1, x2, y2):
                     bw = rgb_to_grayscale(r, b, b)
                     if bw < bw_threshold:
                         pix[x, y] = (255, 255, 255, a)
+                        changed = True
                         #print("[%d:%d] => %s" % (x, y, str(pix[x, y])))
                     else:
                         t += 1    
@@ -47,6 +50,7 @@ def fill_xborder_b2w(pix, x1, y1, x2, y2):
                     bw = rgb_to_grayscale(r, b, b)
                     if bw < bw_threshold:
                         pix[x, y] = (255, 255, 255)
+                        changed = True
                         #print("[%d:%d] => %s" % (x, y, str(pix[x, y])))
                     else:
                         t += 1                
@@ -60,7 +64,8 @@ def fill_xborder_b2w(pix, x1, y1, x2, y2):
 def fill_yborder_b2w(pix, x1, y1, x2, y2):
     xdec = 1 if x2 >= x1 else -1
     ydec = 1 if y2 >= y1 else -1
-    y = y1        
+    changed = False
+    y = y1
     try:        
         while y != y2:
             x = x1
@@ -70,6 +75,7 @@ def fill_yborder_b2w(pix, x1, y1, x2, y2):
                 if img.mode in ("P", "L"):
                     if pix[x, y] == 0:
                         pix[x, y] = 255
+                        changed = True
                         #print("[%d:%d] => %s" % (x, y, str(pix[x, y])))
                     else:
                         t += 1
@@ -78,6 +84,7 @@ def fill_yborder_b2w(pix, x1, y1, x2, y2):
                     bw = rgb_to_grayscale(r, b, b)
                     if bw < bw_threshold:
                         pix[x, y] = (255, 255, 255, a)
+                        changed = True
                         #print("[%d:%d] => %s" % (x, y, str(pix[x, y])))
                     else:
                         t += 1    
@@ -85,6 +92,7 @@ def fill_yborder_b2w(pix, x1, y1, x2, y2):
                     bw = rgb_to_grayscale(r, b, b)
                     if bw < bw_threshold:
                         pix[x, y] = (255, 255, 255)
+                        changed = True
                         #print("[%d:%d] => %s" % (x, y, str(pix[x, y])))
                     else:
                         t += 1                
@@ -114,18 +122,19 @@ img = Image.open(filename)
 (width, height) = img.size
 pix = img.load()
 
-fill_yborder_b2w(pix, 0, 0, xborder1, height)
-fill_yborder_b2w(pix, width - 1, 0, width - xborder2, height)
+changed = fill_yborder_b2w(pix, 0, 0, xborder1, height)
+if fill_yborder_b2w(pix, width - 1, 0, width - xborder2, height): changes = True
 
-fill_xborder_b2w(pix, xborder1 + 1, 0, width - xborder2, xborder1)
-fill_xborder_b2w(pix, width - xborder2, height - 1, xborder1, height - yborder2)
+if fill_xborder_b2w(pix, xborder1 + 1, 0, width - xborder2, xborder1): changes = True
+if fill_xborder_b2w(pix, width - xborder2, height - 1, xborder1, height - yborder2): changes = True
 
-filename_back = filename + ".back"
-if os.path.isfile(filename_back):
-    os.remove(filename_back)
+if changed:
+    filename_back = filename + ".back"
+    if os.path.isfile(filename_back):
+        os.remove(filename_back)
 
-os.rename(filename, filename_back)
-img.save(filename)
+    os.rename(filename, filename_back)
+    img.save(filename)
 
-#filename_back = "_" + filename
-#img.save(filename_back)
+    #filename_back = "_" + filename
+    #img.save(filename_back)
