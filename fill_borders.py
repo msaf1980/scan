@@ -23,7 +23,7 @@ def fill_xborder_b2w(pix, x1, y1, x2, y2):
     xdec = 1 if x2 >= x1 else -1
     ydec = 1 if y2 >= y1 else -1
     changed = False
-    print("[%d:%d] [%d:%d]" % (x1, y1, x2, y2))
+    #print("[%d:%d] [%d:%d]" % (x1, y1, x2, y2))
     x = x1
     try:        
         while x != x2:
@@ -69,7 +69,7 @@ def fill_yborder_b2w(pix, x1, y1, x2, y2):
     xdec = 1 if x2 >= x1 else -1
     ydec = 1 if y2 >= y1 else -1
     changed = False
-    print("[%d:%d] [%d:%d]" % (x1, y1, x2, y2))
+    #print("[%d:%d] [%d:%d]" % (x1, y1, x2, y2))
     y = y1
     try:        
         while y != y2:
@@ -144,9 +144,13 @@ else:
         bgcolor = (255, 255, 255)
     
     draw = ImageDraw.Draw(img)
+    #print("[%d:%d] [%d:%d]" % (0, 0, xborder1, height))
     draw.rectangle((0, 0, xborder1, height), fill=bgcolor)
+    #print("[%d:%d] [%d:%d]" % (width - 1, 0, width - xborder2, height))
     draw.rectangle((width - 1, 0, width - xborder2, height), fill=bgcolor)
-    draw.rectangle((xborder1 + 1, 0, width - xborder2, xborder1), fill=bgcolor)
+    #print("[%d:%d] [%d:%d]" % (xborder1 + 1, 0, width - xborder2, yborder1))
+    draw.rectangle((xborder1 + 1, 0, width - xborder2, yborder1), fill=bgcolor)
+    #print("[%d:%d] [%d:%d]" % (width - xborder2, height - 1, xborder1, height - yborder2))
     draw.rectangle((width - xborder2, height - 1, xborder1, height - yborder2), fill=bgcolor)
 
      
